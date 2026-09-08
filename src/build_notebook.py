@@ -96,10 +96,22 @@ md("## 4. Time-Series Visualization")
 code("""plt.figure(figsize=(13,4)); plt.plot(temp.index, temp.values, lw=0.6, color='#c0392b')
 plt.title('Daily Mean Temperature — Bengaluru (VOBL), 2010–2024')
 plt.xlabel('Date'); plt.ylabel('Temperature (°C)'); plt.tight_layout(); plt.show()""")
-md("*Clear repeating annual band ~18–32 °C; pre-monsoon (Mar–May) peaks, monsoon/winter troughs; no dramatic drift.*")
+md("""> **Inference.** The daily temperature forms a **clear, repeating annual band of
+> roughly 18–32 °C**. Each year shows the same shape: a pronounced **pre-monsoon peak
+> (Mar–May)** when the station is hottest, followed by cooler **monsoon-to-winter
+> troughs**. There is no dramatic long-term drift visible to the eye — the level stays
+> inside the same band across all 15 years, our first visual clue that the series is
+> **bounded and mean-reverting** (formally confirmed by the stationarity tests in §7).
+> The regularity of the cycle is exactly the structure a forecasting model can exploit.""")
 code("""plt.figure(figsize=(13,4)); plt.bar(prcp.index, prcp.values, width=1.0, color='#2471a3')
 plt.title('Daily Precipitation'); plt.xlabel('Date'); plt.ylabel('Precipitation (mm)'); plt.tight_layout(); plt.show()""")
-md("*Spiky and intermittent: long near-zero dry stretches punctuated by clustered monsoon rainfall.*")
+md("""> **Inference.** Precipitation behaves **completely differently** from temperature:
+> it is **spiky and intermittent**, with long near-zero dry stretches (Dec–Mar)
+> punctuated by clustered high-rainfall events concentrated in the monsoon and
+> post-monsoon months. The descriptive statistics confirm the strong right-skew
+> (median 0.51 mm but max 132.3 mm). This intermittency is why precipitation is only
+> **weakly predictable day-to-day** and is used here as an exploratory contrast
+> variable, while the smooth, near-complete temperature series is the forecast target.""")
 code("""rm, rs = temp.rolling(30).mean(), temp.rolling(30).std()
 fig, ax = plt.subplots(2,1,figsize=(13,7),sharex=True)
 ax[0].plot(temp.index, temp.values, lw=0.4, alpha=0.35, color='grey', label='Daily')
@@ -107,10 +119,18 @@ ax[0].plot(rm.index, rm.values, lw=1.6, color='#c0392b', label='30-day mean'); a
 ax[0].set_ylabel('°C'); ax[0].set_title('Temperature with 30-day Rolling Mean')
 ax[1].plot(rs.index, rs.values, lw=1.1, color='#8e44ad'); ax[1].set_ylabel('Std (°C)')
 ax[1].set_title('30-day Rolling Std'); ax[1].set_xlabel('Date'); plt.tight_layout(); plt.show()""")
-md("""**Why 30 days?** long enough to average out day-to-week synoptic noise, short
-enough to keep the seasonal shape, and equal to the model input window. The rolling
-**mean** = local seasonal level; the rolling **std** = local volatility — its own
-seasonality signals mild heteroskedasticity (transition months are more variable).""")
+md("""> **Inference.** The **30-day rolling mean** smooths the daily noise into a clean,
+> stable seasonal wave that repeats every year — visual evidence of the dominant
+> annual cycle quantified later by STL. The **30-day rolling standard deviation is
+> itself seasonal** (higher spread in the pre-monsoon/transition months, lower in
+> stable periods), which tells us the variance is **time-varying but bounded** — mild
+> heteroskedasticity rather than an exploding variance.
+>
+> **Why a 30-day window?** It is long enough to average out day-to-week synoptic
+> weather noise yet short enough to preserve the intra-annual seasonal shape, and it
+> **matches the model input window** so the smoothing view and the forecasting memory
+> are directly comparable. The rolling **mean** represents the local seasonal *level*;
+> the rolling **std** represents local *volatility*.""")
 code("""mt = temp.resample('MS').mean()
 plt.figure(figsize=(13,4)); plt.plot(mt.index, mt.values, marker='o', ms=2.5, color='#c0392b')
 plt.title('Monthly Mean Temperature'); plt.xlabel('Month'); plt.ylabel('°C'); plt.tight_layout(); plt.show()
@@ -118,7 +138,14 @@ clim = prcp.groupby(prcp.index.month).mean()
 plt.figure(figsize=(9,4)); plt.bar(clim.index, clim.values, color='#2471a3')
 plt.title('Mean Daily Precipitation by Month'); plt.xlabel('Month'); plt.ylabel('mm'); plt.xticks(range(1,13))
 plt.tight_layout(); plt.show()""")
-md("*Monthly means repeat the annual cycle (Apr/May max); precipitation climatology peaks Sep–Oct, dry Dec–Feb.*")
+md("""> **Inference.** Aggregating to the calendar month sharpens both signals. **Monthly
+> mean temperature** traces the same annual cycle every year with a consistent
+> **April/May maximum** and a monsoon/winter minimum — the seasonal pattern is
+> reproducible, not a one-off. The **monthly precipitation climatology** confirms a
+> distinct **wet season peaking around Sep–Oct** and a dry **Dec–Feb** window. So
+> temperature and rainfall share the *same underlying seasonal driver* (the monsoon)
+> but express it differently: temperature as a smooth wave, rainfall as concentrated
+> wet-season bursts.""")
 code("""# Monthly boxplot + seasonal SUBSERIES plot
 tdf = temp.to_frame('t'); tdf['month'] = tdf.index.month
 plt.figure(figsize=(11,4)); tdf.boxplot(column='t', by='month', grid=False)
@@ -134,7 +161,15 @@ for i,m in enumerate(range(1,13)):
 plt.xticks(range(12), ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])
 plt.title('Seasonal Subseries — Monthly Mean Temperature (blue: each year, red: month mean)')
 plt.xlabel('Month'); plt.ylabel('°C'); plt.tight_layout(); plt.show()""")
-md("*The boxplot shows the seasonal location shift and wider pre-monsoon spread; the subseries plot shows each year's monthly means cluster tightly around the month mean — a **stable, repeatable** annual shape.*")
+md("""> **Inference.** The **monthly boxplot** shows the seasonal *location shift* clearly —
+> median temperature climbs into the pre-monsoon months and falls back afterwards —
+> together with a **wider spread in the transition months**, echoing the seasonal
+> rolling-std finding. The **seasonal subseries plot** is the strongest visual evidence
+> of seasonality: within each month, the individual per-year means (blue) cluster
+> **tightly around the month mean (red)** with little year-to-year drift. This tells us
+> the annual cycle is **stable and repeatable** rather than noisy or shifting, which is
+> precisely why a seasonal signal can be learned and why a model that ignores it (e.g. a
+> plain mean forecast) does poorly.""")
 
 # 5 Trend
 md("## 5. Trend Analysis")
@@ -152,22 +187,40 @@ plt.tight_layout(); plt.show()
 print(f'STL trend: {stl.trend.dropna().iloc[0]:.2f} -> {stl.trend.dropna().iloc[-1]:.2f} °C '
       f'(delta {stl.trend.dropna().iloc[-1]-stl.trend.dropna().iloc[0]:+.2f} °C)')
 print(f'Linear slope: {slope_dec:+.3f} °C/decade | STL trend strength: {ts:.3f}')""")
-md("""*A **mild warming trend** (~+0.19 °C/decade, +0.30 °C over 15 years) but **weak**
-(trend strength 0.12) relative to the ~13 °C seasonal amplitude — the series is
-season-dominated. This is an **observed** association over one station, **not** a
-causal climate-change claim.*""")
+md("""> **Inference.** Trend is quantified three independent ways and they agree. (1) The
+> **isolated STL trend component** rises from **24.49 °C (2010) → 24.79 °C (2024)**, a
+> net **+0.30 °C** over 15 years. (2) An **OLS linear fit** on the daily series gives a
+> slope of **+0.19 °C per decade**. (3) The **STL trend strength is only 0.12**, i.e.
+> *weak*. So there is a **mild, genuinely visible warming trend, but it is small
+> relative to the ≈13 °C seasonal amplitude** — the series is **season-dominated, not
+> trend-dominated**.
+>
+> Importantly, this is an **observed** association over a single 15-year station record;
+> it is **not** a causal or regional climate-change claim, which would require
+> multi-station, multi-decadal attribution. For forecasting, the practical consequence
+> is that the trend contributes little to short-horizon prediction — the seasonal cycle
+> and short-term persistence dominate.""")
 
 # 6 Seasonality
 md("## 6. Seasonality Analysis")
 code("""ss = max(0.0, 1 - stl.resid.var()/(stl.seasonal+stl.resid).var())
 fig = stl.plot(); fig.set_size_inches(13,9); plt.show()
 print(f'Seasonal strength: {ss:.3f} | ACF at lag 365: {temp.autocorr(365):.3f}')""")
-md("""*Seasonality is the within-year cycle driven by the solar year and monsoon (hot dry
-Mar–May; cooler wet Jun–Sep; mild Oct–Feb). **Seasonal strength 0.80** (dominant), the
-subseries plot shows it is **regular and annual**, and the **lag-365 ACF 0.717** is
-direct autocorrelation evidence. Precipitation is seasonal only in monthly aggregate,
-bursty day-to-day. This strong regular seasonality + high persistence is what makes
-recent history predictive.*""")
+md("""> **Inference.** Here seasonality means the systematic **within-year cycle** driven by
+> the solar year and the Indian monsoon: hot, dry pre-monsoon (Mar–May); cooler, wetter
+> monsoon (Jun–Sep); mild post-monsoon/winter (Oct–Feb). Three lines of evidence show it
+> is **strong and regular**: (1) the **STL seasonal strength is 0.800** — the annual
+> cycle is the *dominant* component; (2) the STL `seasonal` panel is a clean, constant-
+> amplitude wave and the subseries plot (§4) shows the shape repeats each year with
+> little drift; (3) the **ACF at lag 365 is 0.717**, direct autocorrelation evidence of
+> an annual period. The STL `resid` panel is small and centred near zero, meaning trend
+> + season capture most of the systematic variation.
+>
+> Precipitation, by contrast, is seasonal only *in aggregate* and bursty day-to-day.
+> **This combination — strong regular seasonality plus very high short-term persistence
+> (§8) — is exactly what makes recent temperature history predictive**, and it frames the
+> forecasting design: persistence is a strong short-horizon baseline, while an annual
+> seasonal-naive forecast only becomes competitive at long horizons (§16).""")
 
 # 7 Stationarity
 md("""## 7. Stationarity Analysis
@@ -181,13 +234,26 @@ for name, s in [('Raw temperature', temp), ('First difference', td)]:
                  'KPSS stat':round(k['statistic'],3),'KPSS p':k['p_value'],
                  'Conclusion':S.stationarity_conclusion(a,k)})
 pd.DataFrame(rows)""")
-md("""*Raw temperature is **stationary by both tests** — Bengaluru's bounded tropical
-climate is mean-reverting despite seasonality. **Differencing** is examined as the
-standard unit-root remedy: it keeps the series stationary and collapses lag-1 ACF from
-0.92 to −0.15, but since the level series is already stationary, **differencing is not
-required** (we model the level, whose persistence is the signal). **Transformation:**
-we do **not** log-transform temperature (bounded, near-symmetric °C — a log is
-meaningless); precipitation's right-skew would warrant `log1p` only if it were the target.*""")
+md("""> **Inference.** For the **raw series**, ADF **rejects** its unit-root null (p ≈ 0)
+> *and* KPSS **fails to reject** its stationarity null (p ≥ 0.10) — the two tests have
+> **opposite null hypotheses yet agree**, giving a robust conclusion: daily temperature
+> is **stationary in level**. This is physically sensible — Bengaluru's tropical-upland
+> temperature is **bounded and strongly mean-reverting** within its annual band, so
+> despite the visible seasonal oscillation the level does not wander like a random walk.
+> (The KPSS `p = 0.10` is the statsmodels upper bound, i.e. "≥ 0.10", comfortably
+> non-significant.) Because the nulls are opposite, we are careful *not* to say
+> "p < 0.05 ⇒ stationary" without naming the test.
+>
+> **Differencing** is examined because it is the standard remedy *if* a unit root were
+> present: the **first difference stays stationary** and pushes the ADF statistic far
+> more negative, and it collapses the lag-1 autocorrelation from **0.92 to −0.15** (§8).
+> But since the level series is **already stationary, differencing is not required** — we
+> deliberately model the *level*, whose strong persistence is the exploitable signal.
+>
+> **Transformation:** we do **not** log-transform temperature — it is a bounded,
+> near-symmetric interval quantity in °C, so a log is meaningless and would distort it.
+> Precipitation's heavy right-skew *would* warrant a `log1p` transform if it were the
+> model target; since it is only exploratory here, we document the skew instead.""")
 
 # 8 ACF/PACF
 md("## 8. ACF / PACF Analysis")
@@ -202,12 +268,27 @@ print('lag-1 ACF raw :', round(temp.autocorr(1),3))
 print('lag-7 ACF raw :', round(temp.autocorr(7),3))
 print('lag-365 ACF   :', round(temp.autocorr(365),3))
 print('lag-1 ACF diff:', round(td.autocorr(1),3))""")
-md("""*ACF measures total correlation across lags (incl. indirect); PACF isolates a lag
-after removing shorter ones; the blue band is the ~95% confidence interval. Raw lag-1 =
-0.923 (strong persistence), PACF cuts off after 1–2 lags (**AR-like**), annual echo at
-lag-365 = 0.717. Differencing drops lag-1 to −0.150 (short-memory noise). → this
-justifies a low-order **ARIMA(2,0,2)** (d=0, already stationary) and a **30-day input
-window** for the neural models; persistence is expected to be a strong short-horizon baseline.*""")
+md("""> **Inference.** First, the definitions matter: **ACF** measures the correlation
+> between the series and its lag *including* indirect propagation through intermediate
+> lags, whereas **PACF** isolates the *direct* correlation at a lag after removing all
+> shorter lags; the shaded band is the ≈95% confidence interval, so spikes outside it are
+> significant.
+>
+> Reading the plots: the raw **lag-1 ACF is 0.923** — very strong day-to-day persistence
+> — and the ACF **decays slowly** over many lags, while the raw **PACF cuts off sharply
+> after the first 1–2 lags**. That ACF-tails-off / PACF-cuts-off pattern is the classic
+> **AR-like signature**: today's temperature is largely explained by the immediately
+> preceding day(s). The long-lag ACF shows an **annual echo at lag 365 (0.717)** (and
+> 0.768 at lag 7). After **first differencing**, the lag-1 ACF collapses to **−0.150**
+> and the slow decay vanishes, confirming the differenced series is close to short-memory
+> noise.
+>
+> **Consequences for model choice:** (1) the strong lag-1 persistence explains why
+> **persistence is a hard-to-beat baseline** at t+1; (2) the low-order AR/MA structure
+> with d = 0 (already stationary) justifies a compact **ARIMA(2,0,2)**; (3) the fast PACF
+> cut-off means a **30-day input window** comfortably covers the exploitable short memory
+> for the LSTM/Transformer while staying CPU-cheap. The lag-365 seasonal dependence
+> exceeds this window and is instead captured by the seasonal band the models observe.""")
 
 # 9 Findings
 md("""## 9. Initial Findings and Research Hypothesis
@@ -249,7 +330,13 @@ ACF), **Seasonal naive (t-7)** and **(t-365)**, **Mean (climatology)**, and a cl
 **ARIMA(2,0,2)** rolled one-step over the test set (d=0 since stationary).""")
 code("""b = RES['onestep']['baselines']
 pd.DataFrame([{'Model':k,'MAE':round(v['mae'],3),'RMSE':round(v['rmse'],3)} for k,v in b.items()])""")
-md("*Persistence is by far the strongest naive baseline; seasonal-naive and mean are much worse — a highly autocorrelated series is best approximated by its most recent value, not by last week/year or the long-run mean.*")
+md("""> **Inference.** Among the naive baselines, **persistence (t-1) is by far the strongest**
+> (MAE 0.668 °C), while **seasonal-naive t-7 (1.19), t-365 (1.38) and the climatological
+> mean (1.75) are much worse**. This ordering is itself a finding: a series with lag-1
+> autocorrelation of 0.92 is best approximated by its **most recent value**, not by the
+> value a week or a year ago, and certainly not by the long-run mean. It sets a genuinely
+> demanding bar — any "sophisticated" model must beat persistence to justify itself, which
+> is exactly the H0/H1 test posed in §9.""")
 
 # 12 LSTM (live train + saved figs)
 md("""## 12. LSTM
@@ -276,7 +363,13 @@ pl = inv(M.predict(lstm, Xte).ravel())
 print('LSTM (live)  MAE %.3f  RMSE %.3f  epochs %d  %.1fs'%(M.mae(yte_o,pl),M.rmse(yte_o,pl),len(lhist['train']),ltt))""")
 code("""for f in ['lstm_loss.png','lstm_forecast.png','lstm_residuals.png']:
     display(Image(filename=os.path.join(FIG,f)))""")
-md("*Smooth train/val convergence with early stopping (no overfitting); predictions track the seasonal signal; residuals are near-zero-mean and roughly symmetric.*")
+md("""> **Inference.** The **loss curve** shows smooth train/validation convergence with early
+> stopping and no validation blow-up — the small model does **not overfit**. The
+> **forecast plot** shows the LSTM tracking the seasonal signal closely on unseen data,
+> and the **residuals** are near-zero-mean (+0.04 °C) and roughly symmetric — little
+> systematic bias. Quantitatively the one-step **LSTM (MAE 0.650) beats persistence
+> (0.668)**, so recurrent memory over the 30-day window extracts real signal beyond
+> "yesterday's value" — the first concrete evidence for H1.""")
 
 # 13 Transformer
 md("""## 13. Transformer
@@ -289,6 +382,13 @@ pt = inv(M.predict(trf, Xte).ravel())
 print('Transformer (live)  MAE %.3f  RMSE %.3f  epochs %d  %.1fs'%(M.mae(yte_o,pt),M.rmse(yte_o,pt),len(thist['train']),ttt))
 for f in ['transformer_loss.png','transformer_forecast.png','transformer_residuals.png']:
     display(Image(filename=os.path.join(FIG,f)))""")
+md("""> **Inference.** The Transformer converges cleanly (loss curve), tracks the test signal
+> (forecast plot), and has near-zero-mean residuals (+0.08 °C). At one step it scores
+> **MAE 0.655 — also beating persistence (0.668)** and essentially tied with the LSTM.
+> Its real advantage appears at **longer horizons** (§16): because self-attention can
+> weight any lag in the 30-day window, it degrades most gracefully as the forecast lead
+> time grows. So the two neural architectures are comparable at t+1 but the Transformer
+> generalises better across the multi-step horizon.""")
 
 # 14 Test-set evaluation
 md("""## 14. Test-Set Evaluation (leakage checks)
@@ -300,6 +400,12 @@ code("""assert np.isclose(scaler.mean_[0], vals[:i_tr].mean())   # scaler used t
 assert min(ti) >= i_va and max(ti) < n                    # test targets in the test region
 print('Leakage checks passed. Test target dates:', tdates.min().date(), '->', tdates.max().date())
 print('N test sequences:', len(Xte))""")
+md("""> **Inference.** The asserts confirm the evaluation is **leakage-free**: the scaler used
+> only training statistics, and every test target index lies strictly inside the held-out
+> test region (2022-10-02 → 2024-12-31, 822 sequences). Therefore **all reported MAE/RMSE
+> are true out-of-sample test metrics** — the models are judged on data they never saw
+> during training or early-stopping. This is what makes the model-vs-baseline comparison
+> in §16 trustworthy.""")
 
 # 15 Error / residual analysis
 md("## 15. Error / Residual Analysis & Spike Investigation")
@@ -310,10 +416,16 @@ print('Top-10 largest-error days shared by BOTH models:', ea['n_overlap'], 'of 1
 print('Of those spike days, # with interpolated inputs:', ea['spike_dates_interpolated'])
 print('Shared high-error dates:', ea['top10_error_overlap_dates'])
 display(Image(filename=os.path.join(FIG,'error_spikes.png')))""")
-md("""*All 10 largest-error days are **shared** by both models and **none** coincide with
-interpolated inputs — they fall on abrupt pre-monsoon heat swings and monsoon-onset
-transitions. The models share a genuine limitation (they lag rapid regime changes)
-rather than suffering a data-quality artefact.*""")
+md("""> **Inference.** The residual means are tiny (LSTM +0.04 °C, Transformer +0.08 °C), so
+> neither model is systematically biased. The spike investigation is more revealing:
+> **all 10 of the largest-error days are shared by both models** (e.g. 2023-04-21,
+> 2023-05-20, 2024-06-01) and **none of them coincide with interpolated inputs**. Those
+> dates fall on **abrupt pre-monsoon heat swings and monsoon-onset transitions**. Two
+> conclusions follow: (1) the errors are **not a data-quality artefact** — they are not
+> caused by our interpolation; and (2) the models share a **genuine, explainable
+> limitation** — a univariate temperature history cannot anticipate sudden regime changes
+> triggered by monsoon dynamics. This directly motivates the §17 recommendation to add
+> exogenous predictors (humidity, pressure, rainfall).""")
 
 # 16 Model comparison + multi-horizon
 md("## 16. Model Comparison")
@@ -321,6 +433,16 @@ code("""rank = RES['onestep']['ranking']
 display(pd.DataFrame([{'Model':r['model'],'MAE':round(r['mae'],3),'RMSE':round(r['rmse'],3)} for r in rank]))
 print('Best one-step model (lowest RMSE):', RES['onestep']['best'])
 display(Image(filename=os.path.join(FIG,'model_comparison.png')))""")
+md("""> **Inference (one-step).** Ranked by RMSE, **ARIMA(2,0,2) is best (MAE 0.638)**, with
+> the **LSTM (0.650) and Transformer (0.655) close behind — and, crucially, all three beat
+> persistence (0.668)**, which in turn crushes the seasonal-naive and mean baselines. So
+> at t+1 the sophisticated models **do add genuine value over the naive benchmark
+> (rejecting H0)**, though the margin over persistence is modest because a lag-1
+> autocorrelation of 0.92 makes "yesterday" already a near-optimal predictor. ARIMA's
+> narrow lead over the neural nets is **not** claimed as statistically significant — the
+> differences are within noise. A notable meta-finding: an earlier 6-year version of this
+> pipeline could *not* beat persistence, so **adequate sample size (15 years), not model
+> choice alone, is what let deep learning win**.""")
 md("**Multi-horizon MAE by lead time** — *which* model wins depends on horizon:")
 code("""mh = RES['multi_horizon']; H = mh['horizons']
 rows=[]
@@ -328,11 +450,17 @@ for m in ['Persistence','Seasonal naive (365)','LSTM','Transformer']:
     rows.append({'Model':m, **{f'{h}d':round(mh[m][str(h)]['mae'],2) for h in H}})
 display(pd.DataFrame(rows))
 display(Image(filename=os.path.join(FIG,'error_vs_horizon.png')))""")
-md("""*Lower is better. ARIMA/LSTM/Transformer all beat persistence at t+1 (rejecting H0);
-persistence degrades fastest with lead time while the **Transformer degrades most
-gracefully and is best from day 7 to day 30**. Seasonal-naive(365) is flat (copies last
-year) and only competitive past ~3 weeks. Small differences among the top models are not
-claimed statistically significant.*""")
+md("""> **Inference (multi-horizon).** Lower is better, and the striking result is that **the
+> best model depends on the forecast lead time** — a single aggregate metric would have
+> hidden this. **Persistence is excellent at t+1 (0.67) but degrades fastest**, ballooning
+> to 1.74 by day 30 as "today" becomes a stale predictor. The **Transformer degrades most
+> gracefully and is the best model from day 7 through day 30** (1.38 at 30 days vs
+> persistence's 1.74), because attention can weight the whole 30-day window rather than
+> just the last value. The **seasonal-naive(365) forecast is flat** (~1.40 at every
+> horizon, since it simply copies last year) and only becomes competitive with persistence
+> past ~3 weeks. **Overall:** use persistence/ARIMA for next-day forecasts, but prefer the
+> Transformer for multi-day-ahead forecasting. (Small differences among the top models are
+> not claimed statistically significant.)""")
 
 # 17 Limitations
 md("""## 17. Limitations
