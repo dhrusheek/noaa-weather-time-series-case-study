@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets / credentials (never commit)
+*.env
+.env
+*.key
+*.pem
+*token*
+*secret*
+credentials*
+
+# Large caches
+*.log
+.cache/
