@@ -1,8 +1,9 @@
-"""Statistical time-series analysis: decomposition, stationarity, ACF/PACF."""
+"""Statistical time-series analysis: decomposition, stationarity, ACF/PACF, ARIMA."""
 import warnings
 
 import numpy as np
 import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller, kpss
 
 warnings.filterwarnings("ignore")
@@ -37,6 +38,22 @@ def kpss_test(series: pd.Series, regression: str = "c") -> dict:
         # fail to reject H0 (p>=0.05) => stationary
         "stationary": bool(p >= 0.05),
     }
+
+
+def arima_rolling_onestep(train: np.ndarray, test: np.ndarray, order=(2, 0, 2)):
+    """Fit ARIMA on train, then roll one-step over the test set via `append`.
+
+    Statsmodels `append` re-uses the fitted parameters and only extends the
+    state, so this is a fast, leakage-free out-of-sample one-step evaluation:
+    each test point is forecast using only data strictly before it.
+    Returns (y_true, y_pred, order).
+    """
+    res = ARIMA(train, order=order).fit()
+    preds = []
+    for i in range(len(test)):
+        preds.append(float(res.forecast(1)[0]))
+        res = res.append([test[i]], refit=False)
+    return test, np.array(preds), order
 
 
 def stationarity_conclusion(adf: dict, kpss_: dict) -> str:

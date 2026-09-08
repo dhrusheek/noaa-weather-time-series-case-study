@@ -9,11 +9,15 @@ URL pattern: `.../access/{YEAR}/{STATION}.csv`
 ## Station
 - **BANGALORE, IN** — GSOD id `43295099999` (USAF 432950 / WBAN 99999), VOBL
 - 12.9667° N, 77.5833° E, elevation 921 m
-- Years: 2019–2024
+- Years: 2010–2024 (15 continuous years, 5,479 daily rows)
 
 ## Files
-- `raw/43295099999_YYYY.csv` — original GSOD CSVs, one per year (small; kept for reproducibility).
+- `raw/43295099999_YYYY.csv` — original GSOD CSVs, one per year (2010–2024; small; kept for reproducibility).
 - `processed/weather_daily.csv` — cleaned daily series produced by `src/preprocessing.py`.
+
+## Missing data (after cleaning)
+- `temperature_c`: 27 missing (0.5 %), filled by ≤3-day time interpolation into `temperature_c_interp`.
+- `precipitation_mm`: 2,594 missing — mostly `PRCP` flag `I` (not measured); kept as NaN, **not** interpolated.
 
 ## GSOD units & sentinels (per NOAA documentation)
 | Field | Meaning | Native unit | Missing sentinel |

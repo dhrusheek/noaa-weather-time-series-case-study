@@ -1,7 +1,13 @@
-"""Forecasting models: persistence baseline, small LSTM, small Transformer.
+"""Forecasting models: baselines, small LSTM, small Transformer.
 
-Target: next-day mean temperature (degrees C), one-step (t+1) forecast.
-Chronological split, scaler fit on TRAIN ONLY, fixed seeds for reproducibility.
+Primary target: next-day mean temperature (degC), one-step (t+1).
+Also supports direct multi-horizon output (t+1 ... t+H) for horizon analysis.
+
+Design guarantees for a leakage-free evaluation:
+  * chronological split (no shuffling across the time axis),
+  * StandardScaler fit on the TRAIN partition only,
+  * input windows never contain any target value,
+  * fixed seeds (Python / NumPy / PyTorch) for reproducibility.
 """
 import math
 import time
@@ -18,44 +24,49 @@ def set_seed(seed: int = SEED) -> None:
     torch.manual_seed(seed)
 
 
-def make_sequences(values: np.ndarray, seq_len: int):
-    X, y = [], []
-    for i in range(len(values) - seq_len):
-        X.append(values[i : i + seq_len])
-        y.append(values[i + seq_len])
-    return np.array(X), np.array(y)
-
-
 def mae(a, b):
-    return float(np.mean(np.abs(a - b)))
+    return float(np.mean(np.abs(np.asarray(a) - np.asarray(b))))
 
 
 def rmse(a, b):
-    return float(np.sqrt(np.mean((a - b) ** 2)))
+    return float(np.sqrt(np.mean((np.asarray(a) - np.asarray(b)) ** 2)))
 
 
 # --------------------------------------------------------------------------- #
-# Baselines
+# Baselines (all operate on the ORIGINAL degC scale)
 # --------------------------------------------------------------------------- #
-def persistence_forecast(y_true_series: np.ndarray):
-    """y_hat(t+1) = y(t). Returns (y_true, y_pred) aligned."""
-    y_pred = y_true_series[:-1]
-    y_true = y_true_series[1:]
+def persistence_forecast(series_slice: np.ndarray):
+    """Naive persistence  y_hat(t+1) = y(t).  Returns (y_true, y_pred)."""
+    return series_slice[1:], series_slice[:-1]
+
+
+def seasonal_naive_forecast(values: np.ndarray, test_idx, m: int):
+    """Seasonal naive  y_hat(t) = y(t-m).  Evaluated on the test indices only.
+
+    Clean (no leakage) for any horizon because y(t-m) is strictly in the past.
+    """
+    y_true = np.array([values[t] for t in test_idx])
+    y_pred = np.array([values[t - m] for t in test_idx])
     return y_true, y_pred
 
 
+def mean_forecast(train_values: np.ndarray, n_test: int):
+    """Climatological mean forecast: predict the TRAIN mean everywhere."""
+    return np.full(n_test, float(np.mean(train_values)))
+
+
 # --------------------------------------------------------------------------- #
-# LSTM
+# LSTM  (direct multi-horizon head; horizon=1 recovers the one-step model)
 # --------------------------------------------------------------------------- #
 class LSTMForecaster(nn.Module):
-    def __init__(self, input_dim=1, hidden=32, layers=1):
+    def __init__(self, input_dim=1, hidden=32, layers=1, horizon=1):
         super().__init__()
         self.lstm = nn.LSTM(input_dim, hidden, layers, batch_first=True)
-        self.head = nn.Linear(hidden, 1)
+        self.head = nn.Linear(hidden, horizon)
 
     def forward(self, x):
         out, _ = self.lstm(x)
-        return self.head(out[:, -1, :]).squeeze(-1)
+        return self.head(out[:, -1, :])          # (batch, horizon)
 
 
 # --------------------------------------------------------------------------- #
@@ -76,7 +87,8 @@ class PositionalEncoding(nn.Module):
 
 
 class TransformerForecaster(nn.Module):
-    def __init__(self, input_dim=1, d_model=32, nhead=4, layers=2, ff=64, dropout=0.1):
+    def __init__(self, input_dim=1, d_model=32, nhead=4, layers=2, ff=64,
+                 dropout=0.1, horizon=1):
         super().__init__()
         self.proj = nn.Linear(input_dim, d_model)
         self.pos = PositionalEncoding(d_model)
@@ -84,17 +96,16 @@ class TransformerForecaster(nn.Module):
             d_model, nhead, dim_feedforward=ff, dropout=dropout, batch_first=True
         )
         self.encoder = nn.TransformerEncoder(enc, num_layers=layers)
-        self.head = nn.Linear(d_model, 1)
+        self.head = nn.Linear(d_model, horizon)
 
     def forward(self, x):
-        x = self.proj(x)
-        x = self.pos(x)
+        x = self.pos(self.proj(x))
         x = self.encoder(x)
-        return self.head(x[:, -1, :]).squeeze(-1)
+        return self.head(x[:, -1, :])            # (batch, horizon)
 
 
 # --------------------------------------------------------------------------- #
-# Training loop (shared)
+# Shared training loop  (returns loss history for train/val curves)
 # --------------------------------------------------------------------------- #
 def train_model(model, Xtr, ytr, Xva, yva, epochs=15, patience=3, lr=1e-3, batch=64):
     set_seed()
@@ -107,30 +118,42 @@ def train_model(model, Xtr, ytr, Xva, yva, epochs=15, patience=3, lr=1e-3, batch
     ytr_t = torch.tensor(ytr, dtype=torch.float32)
     Xva_t = torch.tensor(Xva, dtype=torch.float32)
     yva_t = torch.tensor(yva, dtype=torch.float32)
+    if ytr_t.ndim == 1:                          # one-step -> (n,1) for a uniform head
+        ytr_t = ytr_t.unsqueeze(-1); yva_t = yva_t.unsqueeze(-1)
 
     n = len(Xtr_t)
     best_val, best_state, wait = float("inf"), None, 0
+    hist = {"train": [], "val": []}
     t0 = time.time()
     for _ in range(epochs):
         model.train()
         perm = torch.randperm(n)
+        ep_loss = 0.0
         for i in range(0, n, batch):
             idx = perm[i : i + batch]
             opt.zero_grad()
-            out = model(Xtr_t[idx])
-            loss = loss_fn(out, ytr_t[idx])
-            loss.backward()
-            opt.step()
+            loss = loss_fn(model(Xtr_t[idx]), ytr_t[idx])
+            loss.backward(); opt.step()
+            ep_loss += loss.item() * len(idx)
         model.eval()
         with torch.no_grad():
             val = loss_fn(model(Xva_t), yva_t).item()
+        hist["train"].append(ep_loss / n); hist["val"].append(val)
         if val < best_val - 1e-6:
-            best_val, best_state, wait = val, {k: v.clone() for k, v in model.state_dict().items()}, 0
+            best_val = val
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            wait = 0
         else:
             wait += 1
             if wait >= patience:
                 break
     if best_state is not None:
         model.load_state_dict(best_state)
-    train_time = time.time() - t0
-    return model, best_val, train_time
+    return model, best_val, time.time() - t0, hist
+
+
+def predict(model, X):
+    model.eval()
+    with torch.no_grad():
+        out = model(torch.tensor(X, dtype=torch.float32)).numpy()
+    return out

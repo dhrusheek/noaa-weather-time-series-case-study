@@ -13,7 +13,10 @@ import urllib.request
 
 BASE = "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access"
 STATION = "43295099999"          # Bengaluru (VOBL)
-YEARS = list(range(2019, 2025))  # 2019-2024 inclusive
+# Extended coverage: the retrieval is fully automated over HTTPS, so we pull the
+# widest continuous window the station offers. Years that 404 are skipped with a
+# warning (see download_year), keeping the pipeline reproducible from scratch.
+YEARS = list(range(2010, 2025))  # 2010-2024 inclusive (extend for more samples)
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
