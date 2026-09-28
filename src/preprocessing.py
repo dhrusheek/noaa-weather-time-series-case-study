@@ -82,12 +82,14 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def build_processed(station: str = "43295099999", save: bool = True) -> pd.DataFrame:
+def build_processed(station: str = "43295099999", save: bool = True,
+                    save_path: str | None = None) -> pd.DataFrame:
     raw = load_raw(station)
     out = clean(raw)
     if save:
-        os.makedirs(os.path.dirname(PROCESSED_PATH), exist_ok=True)
-        out.reset_index().to_csv(PROCESSED_PATH, index=False)
+        path = save_path or PROCESSED_PATH
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        out.reset_index().to_csv(path, index=False)
     return out
 
 

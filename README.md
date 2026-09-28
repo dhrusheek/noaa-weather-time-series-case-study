@@ -1,25 +1,29 @@
-# NOAA Weather Time-Series Case Study — Bengaluru (VOBL)
+# NOAA Weather Time-Series Case Study — Major Indian Cities
 
-Time-series analysis and short-term forecasting of daily temperature and
-precipitation for a NOAA weather station, using the **Global Summary of the Day
-(GSOD)** product. Full statistical analysis (trend, seasonality, stationarity,
-autocorrelation) plus **five baselines**, an **LSTM**, and a **Transformer**,
-evaluated at **one step** and across a **30-day horizon**.
+Comparable time-series analysis and short-term temperature forecasting for eight
+Indian cities using NOAA's **Global Summary of the Day (GSOD)**. Each location gets
+the same statistical analysis, **five baselines**, an **LSTM**, and a **Transformer**,
+evaluated one day ahead and across a **30-day horizon**.
 
 ## Overview
 
-- **Station:** BANGALORE, IN — GSOD id `43295099999` (USAF 432950 / WBAN 99999), VOBL
-- **Location:** 12.9667° N, 77.5833° E, elevation 921 m
-- **Period:** 2010-01-01 → 2024-12-31 (**5,479** daily records, ≈15 years)
-- **Primary variable:** daily mean temperature (°C) · **Secondary:** precipitation (mm)
+This repository now runs the same end-to-end time-series analysis for eight major
+Indian cities: Bengaluru, Delhi, Mumbai, Chennai, Kolkata, Hyderabad, Ahmedabad,
+and Pune. Each is represented by a single NOAA GSOD airport/observatory station,
+with daily data from 2010 through 2024. Per-city forecasts use the same
+train/validation/test split, baselines, neural models, and metrics; comparison outputs include absolute
+errors and improvement relative to each city's persistence forecast.
+
+- **Period:** 2010-01-01 → 2024-12-31 (daily records)
+- **Primary forecast target:** daily mean temperature (°C)
+- **Exploratory secondary variable:** precipitation (mm)
 
 ## Research Question
 
 > How do temporal dependence, trend, and seasonal patterns influence daily mean
-> temperature at the Bengaluru NOAA station, and to what extent can historical
-> observations forecast temperature — one day ahead and over a 30-day horizon —
-> using LSTM and Transformer models? (Supporting: how does precipitation differ from
-> temperature in variability, stationarity, and autocorrelation?)
+> How do temporal structure and weather variability differ across major Indian
+> cities, and how easily can daily temperature be forecast in each city one day
+> ahead and over a 30-day horizon using the same baselines and neural models?
 
 Observational data — **no causal claims**.
 
@@ -33,7 +37,7 @@ and inches (precipitation, sentinel `99.99`); converted to °C and mm. `PRCP` fl
 
 ## Methodology
 
-1. **Automated HTTPS retrieval** of all yearly GSOD CSVs (`src/download_data.py`).
+1. **Automated HTTPS retrieval** of the configured yearly GSOD CSVs for eight cities (`src/download_data.py`, `src/cities.py`).
 2. **Reproducible cleaning**: unit conversion, sentinel/flag handling, duplicate
    removal, reindex to a continuous daily calendar, ≤3-day temperature interpolation
    (`src/preprocessing.py`).
@@ -58,13 +62,64 @@ and inches (precipitation, sentinel `99.99`); converted to °C and mm. `PRCP` fl
 | Initial findings/hypothesis | 1 | Prose synthesis + H1/H0 with outcome; report §9 |
 | **Total** | **10** | **Complete** |
 
+## City Comparison Outputs
+
+`src/run_all_cities.py` runs the full statistical and forecasting analysis per city.
+It writes individual results to `results/cities/`, a ranked summary to
+`results/city_comparison.csv` and `results/city_comparison.json`, per-city figures
+to `figures/cities/<city>/`, and comparison plots to `figures/city_comparison/`.
+Use test MAE/RMSE for absolute forecast error and skill vs persistence
+(`1 - model MAE / persistence MAE`) to compare improvement over each city's local
+naive forecast.
+
+The remaining forecasting rubric is covered by
+[report/remaining_rubric_analysis.md](report/remaining_rubric_analysis.md): it compares
+ARIMA, SARIMA, ARMAX, SARIMAX, two Holt-Winters variants, Random Forest, Gradient
+Boosting, LSTM, and Transformer with the same one-step test dates. It includes
+MAE/RMSE/MASE/R², per-city ranks, corrected Diebold-Mariano tests, and residual
+diagnostics. Detailed outputs are in `results/rubric_extension/` and
+`figures/rubric_extension/`.
+
+The complete eight-city walkthrough is in
+[`notebooks/eight_city_weather_forecasting_comparison.ipynb`](notebooks/eight_city_weather_forecasting_comparison.ipynb).
+It brings together the original exploration rubric, city plots, per-city ARIMA-family
+AIC/BIC order selection, forecasting comparisons, residual diagnostics, conclusions,
+and the team-contribution template. It reads saved results and figures; run the
+analysis scripts above first to regenerate them.
+
 ## Forecasting Models
 
 - **5 baselines** — Persistence (t-1), Seasonal naive (t-7), Seasonal naive (t-365), Mean (climatology), **ARIMA(2,0,2)**
 - **LSTM** — hidden 32, 1 layer, ≤15 epochs, early stopping (patience 3)
 - **Transformer** — d_model 32, 4 heads, 2 encoder layers, positional encoding, ≤15 epochs
 
-## Results (actual, from `results.json`)
+## Base-pipeline cross-city one-step summary
+
+Eight city pipelines completed on the common 2022-10-02 to 2024-12-31 test period.
+Ranked by each city's best model test RMSE:
+
+| City | Best one-step model | MAE (°C) | RMSE (°C) | MAE gain vs persistence |
+|---|---|---:|---:|---:|
+| Bengaluru | ARIMA(2,0,2) | 0.638 | 0.829 | +4.4% |
+| Mumbai | LSTM | 0.617 | 0.858 | +3.2% |
+| Chennai | Transformer | 0.631 | 0.858 | +2.7% |
+| Pune | Transformer | 0.743 | 0.976 | +0.6% |
+| Ahmedabad | Transformer | 0.765 | 1.044 | +1.7% |
+| Hyderabad | Transformer | 0.818 | 1.090 | +0.0% |
+| Kolkata | ARIMA(2,0,2) | 0.913 | 1.221 | +1.1% |
+| Delhi | Transformer | 1.044 | 1.367 | +0.7% |
+
+By raw one-step error, Bengaluru is easiest to forecast and Delhi hardest in this
+holdout. For 1/7/14/21/30-day leads, the Transformer improves over persistence in
+all cities; its mean-horizon MAE improvement ranges from 11.8% (Hyderabad) to 30.6%
+(Delhi). Full lead-time results and diagnostics are in [the comparison report](report/city_comparison.md)
+and the machine-readable [comparison CSV](results/city_comparison.csv).
+
+The table above covers the original baseline/LSTM/Transformer pipeline. The expanded
+ARIMA-family, Holt-Winters, and ML comparison has a separate ranking in
+[the remaining-rubric report](report/remaining_rubric_analysis.md).
+
+## Original Bengaluru run (reference results from `results.json`)
 
 **One-step (t+1), out-of-sample test, ranked by RMSE:**
 
@@ -117,6 +172,10 @@ noaa-weather-time-series-case-study/
 └── report/time_series_case_study.md
 ```
 
+The city expansion also adds `src/cities.py`, `src/run_all_cities.py`,
+`results/city_comparison.*`, and `report/city_comparison.md`; figures and processed
+data are organized by station/city.
+
 ## Reproduction Instructions
 
 ```bash
@@ -125,14 +184,20 @@ python -m venv .venv
 # Unix:     source .venv/bin/activate
 pip install -r requirements.txt
 
-python src/download_data.py     # HTTPS fetch GSOD CSVs -> data/raw/
-python src/run_analysis.py      # cleaning + stats + figures + models -> figures/, results.json
+python src/download_data.py     # HTTPS fetch all configured city/year CSVs -> data/raw/
+python src/run_all_cities.py    # full analysis and comparison across all cities
+python src/run_all_cities.py --aggregate-only  # rebuild comparison outputs from saved city results
+python src/rubric_extension.py   # remaining model families, accuracy tests, residual analysis
+python src/rubric_extension.py --skip-existing  # resume from completed per-city extension results
+python src/run_analysis.py      # original Bengaluru-only pipeline
 python src/build_notebook.py    # (optional) regenerate the notebook
 ```
 
-Everything is deterministic (seed = 42) and regenerable from raw data with the two
-commands above. The notebook `notebooks/time_series_case_study.ipynb` runs the same
-analysis top-to-bottom with narrative.
+Neural training uses seed 42 and is reproducible from the downloaded raw data. The
+notebook `notebooks/time_series_case_study.ipynb` documents the original Bengaluru
+analysis; the generated city-specific result JSON files contain the same analysis
+and metrics for each configured location. The new eight-city notebook presents the
+cross-city analysis and remaining model-selection rubric in one place.
 
 ## Data Source
 
@@ -144,10 +209,11 @@ https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv
 
 ## Limitations
 
-Single station/location; 15 years is short for climate-trend attribution; GSOD daily
-precipitation has substantial documented missingness; univariate (no exogenous
-predictors); models intentionally tiny/untuned (CPU + battery); single temporal
-holdout; t+1 structurally favours persistence.
+Each city is represented by one airport/observatory, so local microclimate, elevation,
+and data quality differ. Fifteen years is short for climate-trend attribution; GSOD
+precipitation has substantial documented missingness; forecasting is univariate;
+models are intentionally small and untuned; and results use one temporal holdout.
+Next-day forecasting structurally favours persistence.
 
 ## Authors / Collaborators
 

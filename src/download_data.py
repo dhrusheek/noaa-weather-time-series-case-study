@@ -1,22 +1,22 @@
-"""Download NOAA GSOD daily data for a single station.
+"""Download NOAA GSOD daily data for the configured Indian city stations.
 
 Source: NOAA/NCEI Global Summary of the Day (GSOD)
 URL pattern: https://www.ncei.noaa.gov/data/global-summary-of-the-day/access/{YEAR}/{STATION}.csv
 
-Default station: Bengaluru / Bangalore Int'l Airport (VOBL), STATION id 43295099999
-(USAF 432950, WBAN 99999).
+By default all stations and years configured in ``cities.py`` are downloaded. Pass a
+station id to download just that station.
 """
 import io
 import os
 import sys
 import urllib.request
 
+from cities import CITIES, YEARS
+
 BASE = "https://www.ncei.noaa.gov/data/global-summary-of-the-day/access"
-STATION = "43295099999"          # Bengaluru (VOBL)
 # Extended coverage: the retrieval is fully automated over HTTPS, so we pull the
 # widest continuous window the station offers. Years that 404 are skipped with a
 # warning (see download_year), keeping the pipeline reproducible from scratch.
-YEARS = list(range(2010, 2025))  # 2010-2024 inclusive (extend for more samples)
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
@@ -31,7 +31,7 @@ def download_year(station: str, year: int) -> bytes | None:
         return None
 
 
-def main(station: str = STATION) -> None:
+def download_station(station: str) -> None:
     os.makedirs(RAW_DIR, exist_ok=True)
     ok = 0
     for year in YEARS:
@@ -45,6 +45,15 @@ def main(station: str = STATION) -> None:
     print(f"Downloaded {ok}/{len(YEARS)} years for station {station}")
 
 
+def main(station: str | None = None) -> None:
+    if station:
+        download_station(station)
+    else:
+        for city, info in CITIES.items():
+            print(f"\n{city} ({info['station']})")
+            download_station(info["station"])
+
+
 if __name__ == "__main__":
-    st = sys.argv[1] if len(sys.argv) > 1 else STATION
+    st = sys.argv[1] if len(sys.argv) > 1 else None
     main(st)

@@ -16,6 +16,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+# Small fixed-size CPU models run faster and more consistently without large
+# BLAS/OpenMP thread pools, especially when this pipeline is repeated by city.
+torch.set_num_threads(1)
+
 SEED = 42
 
 

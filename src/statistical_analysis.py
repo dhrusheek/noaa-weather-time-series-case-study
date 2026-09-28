@@ -49,11 +49,14 @@ def arima_rolling_onestep(train: np.ndarray, test: np.ndarray, order=(2, 0, 2)):
     Returns (y_true, y_pred, order).
     """
     res = ARIMA(train, order=order).fit()
-    preds = []
-    for i in range(len(test)):
-        preds.append(float(res.forecast(1)[0]))
-        res = res.append([test[i]], refit=False)
-    return test, np.array(preds), order
+    # Extend once with held-out observations, then request one-step-ahead
+    # in-sample predictions for those dates. The state-space filter conditions
+    # each forecast only on observations available before its target, matching
+    # the former append-one-row loop without repeatedly refiltering the history.
+    extended = res.append(test, refit=False)
+    start = len(train)
+    preds = np.asarray(extended.get_prediction(start=start, end=start + len(test) - 1).predicted_mean)
+    return test, preds, order
 
 
 def stationarity_conclusion(adf: dict, kpss_: dict) -> str:

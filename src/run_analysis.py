@@ -26,6 +26,7 @@ from statsmodels.tsa.seasonal import STL
 import models as M
 import statistical_analysis as S
 from preprocessing import build_processed
+from cities import CITIES
 
 HERE = os.path.dirname(__file__)
 FIG = os.path.join(HERE, "..", "figures")
@@ -44,16 +45,26 @@ def savefig(name):
 
 
 # =========================================================================== #
-def main():
+def main(city_name="Bengaluru", station_id=None):
+    global FIG
+    RESULTS.clear()
+    if city_name not in CITIES:
+        raise ValueError(f"Unknown city {city_name!r}; choose from {', '.join(CITIES)}")
+    city_info = CITIES[city_name]
+    station_id = station_id or city_info["station"]
+    city_slug = city_name.lower().replace(" ", "_")
+    FIG = os.path.join(HERE, "..", "figures", "cities", city_slug)
+    os.makedirs(FIG, exist_ok=True)
     M.set_seed()
-    df = build_processed()
+    processed_path = os.path.join(HERE, "..", "data", "processed", f"weather_daily_{station_id}.csv")
+    df = build_processed(station_id, save_path=processed_path)
     temp = df["temperature_c_interp"].copy()       # continuous series for stats/models
     temp_raw = df["temperature_c"].copy()
     prcp = df["precipitation_mm"].copy()
     interp_mask = temp_raw.isna() & temp.notna()   # days filled by interpolation
 
     RESULTS["station"] = {
-        "name": str(df["NAME"].iloc[0]), "id": "43295099999",
+        "city": city_name, "name": str(df["NAME"].iloc[0]), "id": station_id,
         "lat": float(df["LATITUDE"].iloc[0]), "lon": float(df["LONGITUDE"].iloc[0]),
         "elevation_m": float(df["ELEVATION"].iloc[0]),
     }
@@ -73,13 +84,13 @@ def main():
     # ------------------------------------------------------------------ #
     plt.figure(figsize=(13, 4))
     plt.plot(temp.index, temp.values, lw=0.6, color="#c0392b")
-    plt.title("Daily Mean Temperature — Bengaluru (VOBL)")
+    plt.title(f"Daily Mean Temperature — {city_name}")
     plt.xlabel("Date"); plt.ylabel("Temperature (°C)")
     savefig("temperature_timeseries.png")
 
     plt.figure(figsize=(13, 4))
     plt.bar(prcp.index, prcp.values, width=1.0, color="#2471a3")
-    plt.title("Daily Precipitation — Bengaluru (VOBL)")
+    plt.title(f"Daily Precipitation — {city_name}")
     plt.xlabel("Date"); plt.ylabel("Precipitation (mm)")
     savefig("precipitation_timeseries.png")
 
@@ -87,7 +98,7 @@ def main():
     fig, ax = plt.subplots(2, 1, figsize=(13, 7), sharex=True)
     ax[0].plot(temp.index, temp.values, lw=0.4, alpha=0.35, color="grey", label="Daily")
     ax[0].plot(roll_mean.index, roll_mean.values, lw=1.6, color="#c0392b", label="30-day mean")
-    ax[0].legend(); ax[0].set_ylabel("°C"); ax[0].set_title("Temperature with 30-day Rolling Mean")
+    ax[0].legend(); ax[0].set_ylabel("°C"); ax[0].set_title(f"{city_name}: Temperature with 30-day Rolling Mean")
     ax[1].plot(roll_std.index, roll_std.values, lw=1.1, color="#8e44ad")
     ax[1].set_ylabel("Std (°C)"); ax[1].set_xlabel("Date"); ax[1].set_title("30-day Rolling Std")
     savefig("rolling_statistics.png")
@@ -132,7 +143,7 @@ def main():
     # ------------------------------------------------------------------ #
     stl = STL(temp, period=365, robust=True).fit()
     fig = stl.plot(); fig.set_size_inches(13, 9)
-    fig.suptitle("STL Decomposition of Daily Temperature (period=365)", y=1.01)
+    fig.suptitle(f"{city_name}: STL Decomposition of Daily Temperature (period=365)", y=1.01)
     savefig("seasonal_decomposition.png")
 
     seasonal_strength = max(0.0, 1 - stl.resid.var() / (stl.seasonal + stl.resid).var())
@@ -147,7 +158,7 @@ def main():
     ax[0].plot(temp.index, intercept + slope * x, lw=2, color="#c0392b",
                label=f"Linear trend ({slope_per_decade:+.2f} °C/decade)")
     ax[0].plot(monthly_t.index, monthly_t.values, lw=1.0, color="#f39c12", alpha=0.8, label="Monthly mean")
-    ax[0].legend(); ax[0].set_ylabel("°C"); ax[0].set_title("Explicit Trend — Linear Fit over Daily Temperature")
+    ax[0].legend(); ax[0].set_ylabel("°C"); ax[0].set_title(f"{city_name}: Explicit Linear Trend")
     ax[1].plot(stl.trend.index, stl.trend.values, lw=1.4, color="#16a085")
     ax[1].set_ylabel("°C"); ax[1].set_xlabel("Date"); ax[1].set_title("Isolated STL Trend Component")
     savefig("trend_analysis.png")
@@ -199,6 +210,7 @@ def main():
         "lag1_raw": float(temp.autocorr(1)), "lag1_diff": float(temp_diff.autocorr(1)),
         "acf_lag7_raw": float(temp.autocorr(7)), "acf_lag365_raw": float(temp.autocorr(365)),
     }
+    print(f"  {city_name}: EDA/statistics complete; fitting forecasts", flush=True)
 
     # ================================================================== #
     # FORECASTING SETUP (chronological split; scaler on train only)
@@ -249,6 +261,7 @@ def main():
     arima_pred_full = pd.Series(yp_a, index=temp.index[i_va:])
     arima_pred = arima_pred_full.reindex(test_dates).values
     baselines[f"ARIMA{order}"] = {"mae": M.mae(yte_orig, arima_pred), "rmse": M.rmse(yte_orig, arima_pred)}
+    print(f"  {city_name}: ARIMA complete; training one-step neural models", flush=True)
 
     # ------------------------------------------------------------------ #
     # LSTM + Transformer (one-step) with loss history
@@ -268,6 +281,7 @@ def main():
                         "val_loss": float(trf_val), "train_time": float(trf_tt)},
     }
     RESULTS["onestep"] = {"baselines": baselines, "models": models_res}
+    print(f"  {city_name}: one-step models complete; training 30-day models", flush=True)
 
     # forecast plots
     for pred, name, fname, color in [
@@ -371,6 +385,7 @@ def main():
         "LSTM": horizon_table(pred_lstm_m),
         "Transformer": horizon_table(pred_trf_m),
     }
+    print(f"  {city_name}: multi-horizon models complete; saving results", flush=True)
 
     # error vs horizon plot (MAE)
     plt.figure(figsize=(9, 5))
@@ -403,16 +418,24 @@ def main():
     plt.bar(x - w/2, maes, w, label="MAE", color="#2471a3")
     plt.bar(x + w/2, rmses, w, label="RMSE", color="#c0392b")
     plt.xticks(x, labels, rotation=30, ha="right"); plt.ylabel("Error (°C)")
-    plt.title("One-step Model Comparison — Test MAE / RMSE (sorted by RMSE)"); plt.legend()
+    plt.title(f"{city_name}: One-step Model Comparison — Test MAE / RMSE"); plt.legend()
     savefig("model_comparison.png")
 
-    with open(os.path.join(HERE, "..", "results.json"), "w") as fh:
+    results_dir = os.path.join(HERE, "..", "results", "cities")
+    os.makedirs(results_dir, exist_ok=True)
+    city_result_path = os.path.join(results_dir, f"{city_slug}.json")
+    with open(city_result_path, "w") as fh:
         json.dump(RESULTS, fh, indent=2)
-    print("Best one-step model:", RESULTS["onestep"]["best"])
+    # Preserve the original single-city result path for existing notebook/report consumers.
+    if city_name == "Bengaluru":
+        with open(os.path.join(HERE, "..", "results.json"), "w") as fh:
+            json.dump(RESULTS, fh, indent=2)
+    print(f"{city_name}: best one-step model:", RESULTS["onestep"]["best"])
     print(json.dumps({k: RESULTS[k] for k in ["dataset", "decomposition", "acf", "forecast_setup"]}, indent=2))
     print("One-step ranking (by RMSE):")
     for r in all_rows:
         print(f"  {r[0]:24s} MAE {r[1]:.3f}  RMSE {r[2]:.3f}")
+    return RESULTS
 
 
 if __name__ == "__main__":
