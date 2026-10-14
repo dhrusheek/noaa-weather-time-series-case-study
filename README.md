@@ -84,7 +84,8 @@ The complete eight-city walkthrough is in
 [`notebooks/eight_city_weather_forecasting_comparison.ipynb`](notebooks/eight_city_weather_forecasting_comparison.ipynb).
 It brings together the original exploration rubric, city plots, per-city ARIMA-family
 AIC/BIC order selection, forecasting comparisons, residual diagnostics, conclusions,
-and the team-contribution template. It reads saved results and figures; run the
+the Stage A / Stage B pipeline reconciliation, and the team-contribution table. It reads
+saved results and figures (recomputing only the ACF/PACF); run the
 analysis scripts above first to regenerate them.
 
 ## Forecasting Models

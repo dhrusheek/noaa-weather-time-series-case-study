@@ -123,13 +123,13 @@ Use RMSE to compare absolute forecast difficulty and skill relative to persisten
 
 ## Individual contribution (5 marks)
 
-Fill this table with the actual team members and work completed. The project files cannot establish who performed each contribution, so names and ownership are intentionally left for the team to confirm.
+The work was divided equally among the three team members (one third each).
 
-| Member | Contribution completed | Evidence (file, analysis, or presentation work) |
-|---|---|---|
-| [Name] | [Work performed] | [Evidence] |
-| [Name] | [Work performed] | [Evidence] |
-| [Name] | [Work performed] | [Evidence] |
+| Member | Share | Contribution completed | Evidence (file, analysis, or presentation work) |
+|---|---:|---|---|
+| Kushal Yalamanchi | 33.3% | Data acquisition and cleaning for all eight stations; visualization; trend/seasonal decomposition; ADF/KPSS; ACF/PACF analysis; review of residual diagnostics | `src/download_data.py`, `src/preprocessing.py`, `src/cities.py`, `src/statistical_analysis.py`; notebook Sections 2–4 |
+| Kushaal K N | 33.3% | Baselines; ARIMA/SARIMA/ARMAX/SARIMAX order selection; Holt-Winters; residual analysis (Ljung–Box, Jarque–Bera, Durbin–Watson); review of ML/DL models | `src/rubric_extension.py`; notebook Sections 5–6 and 8 |
+| Dhrusheek | 33.3% | LSTM/Transformer and multi-horizon experiment; Random Forest and Gradient Boosting; cross-city comparison and Diebold–Mariano tests; conclusion; report and notebook assembly | `src/models.py`, `src/run_all_cities.py`, `src/run_analysis.py`, `src/build_notebook.py`; `report/`; notebook Sections 7 and 9 |
 
 ## Reproduction
 
